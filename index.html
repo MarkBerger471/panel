@@ -1109,10 +1109,38 @@ function checkAutoSetup() {
     }
 }
 
+// ── Load from GitHub on startup ──
+async function loadFromGitHub() {
+    const cfg = getGitHubConfig();
+    if (!cfg || !cfg.token || !cfg.repo) return;
+
+    try {
+        const res = await fetch(`https://api.github.com/repos/${cfg.repo}/contents/${cfg.path}`, {
+            headers: { 'Authorization': `Bearer ${cfg.token}`, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        ghSha = data.sha;
+        const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+        if (content && content.candidateNames) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(content));
+            return true;
+        }
+    } catch (e) {
+        console.error('Failed to load from GitHub:', e);
+    }
+    return false;
+}
+
 // ── Init ──
-function init() {
+async function init() {
     checkAutoSetup();
     checkAuth();
+
+    // Pull latest data from GitHub before rendering
+    const loaded = await loadFromGitHub();
+    if (loaded) showSyncStatus('Synced', 'green-500/60');
+
     const state = getState();
     document.getElementById('candidate1-name').value = state.candidateNames[1] || '';
     document.getElementById('candidate2-name').value = state.candidateNames[2] || '';
