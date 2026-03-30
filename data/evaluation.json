@@ -1,14 +1,10 @@
 {
   "candidateNames": {
-    "1": "YAE",
-    "2": "RK"
+    "1": "",
+    "2": ""
   },
   "ratings": {
-    "1": {
-      "operational-performance": 4,
-      "quality-discipline": 4,
-      "safety-compliance": 4
-    },
+    "1": {},
     "2": {}
   },
   "comments": {
