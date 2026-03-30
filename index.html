@@ -1089,8 +1089,29 @@ function exportJSON() {
     URL.revokeObjectURL(url);
 }
 
+// ── Auto-setup via URL hash ──
+// URL format: #setup=TOKEN  (one-time, token saved to localStorage, hash stripped)
+function checkAutoSetup() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#setup=')) {
+        const token = hash.slice(7);
+        if (token) {
+            setGitHubConfig({
+                token: token,
+                repo: 'MarkBerger471/panel',
+                path: 'data/evaluation.json'
+            });
+            // Strip hash from URL
+            history.replaceState(null, '', window.location.pathname);
+            // Immediate sync after page loads
+            setTimeout(() => syncToGitHub(), 500);
+        }
+    }
+}
+
 // ── Init ──
 function init() {
+    checkAutoSetup();
     checkAuth();
     const state = getState();
     document.getElementById('candidate1-name').value = state.candidateNames[1] || '';
