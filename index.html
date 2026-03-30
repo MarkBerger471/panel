@@ -1132,22 +1132,37 @@ async function loadFromGitHub() {
     return false;
 }
 
-// ── Init ──
-async function init() {
-    checkAutoSetup();
-    checkAuth();
-
-    // Pull latest data from GitHub before rendering
-    const loaded = await loadFromGitHub();
-    if (loaded) showSyncStatus('Synced', 'green-500/60');
-
+// ── Populate UI from state ──
+function populateUI() {
     const state = getState();
     document.getElementById('candidate1-name').value = state.candidateNames[1] || '';
     document.getElementById('candidate2-name').value = state.candidateNames[2] || '';
     updateTabLabels();
     renderForm();
     loadDebrief();
-    updateSyncIndicator();
+}
+
+// ── Init ──
+async function init() {
+    checkAutoSetup();
+    checkAuth();
+
+    // Render immediately with local data
+    populateUI();
+
+    // Then pull latest from GitHub and re-render if newer data found
+    const cfg = getGitHubConfig();
+    if (cfg && cfg.token) {
+        showSyncStatus('Loading...', 'mb-accent/70');
+        const loaded = await loadFromGitHub();
+        if (loaded) {
+            populateUI(); // re-render with GitHub data
+            showSyncStatus('Synced', 'green-500/60');
+            setTimeout(() => updateSyncIndicator(), 2000);
+        } else {
+            updateSyncIndicator();
+        }
+    }
 }
 
 init();
