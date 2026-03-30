@@ -4,7 +4,11 @@
     "2": "RK"
   },
   "ratings": {
-    "1": {},
+    "1": {
+      "operational-performance": 4,
+      "quality-discipline": 4,
+      "safety-compliance": 4
+    },
     "2": {}
   },
   "comments": {
