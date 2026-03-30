@@ -318,7 +318,7 @@
                 </div>
                 <div>
                     <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Repository (owner/repo)</label>
-                    <input type="text" id="gh-repo" placeholder="your-username/panel-evaluations"
+                    <input type="text" id="gh-repo" placeholder="MarkBerger471/panel or full GitHub URL"
                         class="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/25 focus:outline-none focus:border-mb-gold/50 transition-all">
                 </div>
                 <div>
@@ -1020,9 +1020,18 @@ function closeSettings() {
     document.getElementById('settings-modal').classList.add('hidden');
 }
 
+function normalizeRepo(input) {
+    // Accept full URLs like https://github.com/owner/repo or owner/repo
+    let r = input.trim().replace(/\/+$/, '');
+    const match = r.match(/github\.com\/([^\/]+\/[^\/]+)/);
+    if (match) r = match[1];
+    r = r.replace(/\.git$/, '');
+    return r;
+}
+
 async function saveSettings() {
     const token = document.getElementById('gh-token').value.trim();
-    const repo = document.getElementById('gh-repo').value.trim();
+    const repo = normalizeRepo(document.getElementById('gh-repo').value);
     const path = document.getElementById('gh-path').value.trim();
     const statusEl = document.getElementById('gh-status');
 
