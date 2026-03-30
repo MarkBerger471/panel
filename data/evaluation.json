@@ -1,0 +1,28 @@
+{
+  "candidateNames": {
+    "1": "YAE",
+    "2": "RK"
+  },
+  "ratings": {
+    "1": {},
+    "2": {}
+  },
+  "comments": {
+    "1": {},
+    "2": {}
+  },
+  "debrief": {
+    "1": {
+      "strengths": "",
+      "validation": "",
+      "risks": "",
+      "followup": ""
+    },
+    "2": {
+      "strengths": "",
+      "validation": "",
+      "risks": "",
+      "followup": ""
+    }
+  }
+}
