@@ -191,6 +191,10 @@
                     <button onclick="showPage('evaluation')" class="nav-link active text-sm text-gray-400 pb-1 uppercase tracking-wider" id="nav-eval">Evaluation</button>
                     <button onclick="showPage('summary')" class="nav-link text-sm text-gray-400 pb-1 uppercase tracking-wider" id="nav-summary">Summary</button>
                 </nav>
+                <span id="sync-status" class="text-[10px] text-gray-600 tracking-wider hidden"></span>
+                <button onclick="openSettings()" class="no-print text-gray-500 hover:text-gray-300 transition-colors" title="GitHub Settings">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
                 <button onclick="logout()" class="no-print text-xs text-gray-600 hover:text-gray-400 transition-colors uppercase tracking-wider">Logout</button>
             </div>
         </div>
@@ -285,7 +289,6 @@
                 <div class="flex gap-3 no-print">
                     <button onclick="exportJSON()" class="glass rounded-xl px-5 py-2.5 text-gray-400 text-xs font-medium tracking-wider uppercase border border-white/10 hover:text-white transition-all">Export JSON</button>
                     <button onclick="window.print()" class="glass rounded-xl px-5 py-2.5 text-gray-400 text-xs font-medium tracking-wider uppercase border border-white/10 hover:text-white transition-all">Print / PDF</button>
-                    <button onclick="saveToGitHub()" class="btn-primary rounded-xl px-5 py-2.5 text-white text-xs font-medium tracking-wider uppercase">Save to GitHub</button>
                 </div>
             </div>
 
@@ -301,15 +304,17 @@
         </div>
     </main>
 
-    <!-- GitHub Modal -->
-    <div id="github-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="glass-strong rounded-2xl p-8 max-w-md w-full mx-4">
-            <h3 class="text-white text-sm font-semibold tracking-widest uppercase mb-6">Save to GitHub</h3>
+            <h3 class="text-white text-sm font-semibold tracking-widest uppercase mb-2">GitHub Auto-Save</h3>
+            <p class="text-xs text-gray-500 mb-6">Configure once. Every change you make will be automatically saved to GitHub.</p>
             <div class="space-y-4">
                 <div>
                     <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">GitHub Personal Access Token</label>
                     <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx"
                         class="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/25 focus:outline-none focus:border-mb-gold/50 transition-all">
+                    <p class="text-[10px] text-gray-600 mt-1">Needs repo contents write permission</p>
                 </div>
                 <div>
                     <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Repository (owner/repo)</label>
@@ -322,8 +327,8 @@
                         class="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/25 focus:outline-none focus:border-mb-gold/50 transition-all">
                 </div>
                 <div class="flex gap-3 pt-2">
-                    <button onclick="closeGitHubModal()" class="flex-1 glass rounded-xl px-4 py-3 text-gray-400 text-sm tracking-wider uppercase border border-white/10 hover:text-white transition-all">Cancel</button>
-                    <button onclick="commitToGitHub()" class="flex-1 btn-primary rounded-xl px-4 py-3 text-white text-sm tracking-wider uppercase">Save</button>
+                    <button onclick="closeSettings()" class="flex-1 glass rounded-xl px-4 py-3 text-gray-400 text-sm tracking-wider uppercase border border-white/10 hover:text-white transition-all">Cancel</button>
+                    <button onclick="saveSettings()" class="flex-1 btn-primary rounded-xl px-4 py-3 text-white text-sm tracking-wider uppercase">Connect</button>
                 </div>
                 <p id="gh-status" class="text-xs text-center mt-2 hidden"></p>
             </div>
@@ -541,6 +546,7 @@ function getState() {
 
 function saveState(state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    triggerAutoSync();
 }
 
 // ── Tier helpers ──
@@ -905,21 +911,116 @@ function escHtml(str) {
     return div.innerHTML;
 }
 
-// ── GitHub Integration ──
-function saveToGitHub() {
+// ── GitHub Auto-Save ──
+let ghSha = null; // track current file SHA for updates
+let syncTimer = null;
+let isSyncing = false;
+
+function getGitHubConfig() {
+    const raw = localStorage.getItem('mb-panel-gh');
+    return raw ? JSON.parse(raw) : null;
+}
+
+function setGitHubConfig(cfg) {
+    localStorage.setItem('mb-panel-gh', JSON.stringify(cfg));
+}
+
+function showSyncStatus(text, color) {
+    const el = document.getElementById('sync-status');
+    el.textContent = text;
+    el.className = `text-[10px] tracking-wider text-${color}`;
+    el.classList.remove('hidden');
+}
+
+function hideSyncStatus() {
+    document.getElementById('sync-status').classList.add('hidden');
+}
+
+function updateSyncIndicator() {
+    const cfg = getGitHubConfig();
+    if (cfg && cfg.token && cfg.repo) {
+        showSyncStatus('Connected', 'green-500/60');
+    }
+}
+
+// Debounced auto-sync: called by saveState
+function triggerAutoSync() {
+    const cfg = getGitHubConfig();
+    if (!cfg || !cfg.token || !cfg.repo) return;
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => syncToGitHub(), 2000);
+}
+
+async function syncToGitHub() {
+    const cfg = getGitHubConfig();
+    if (!cfg || !cfg.token || !cfg.repo || isSyncing) return;
+
+    isSyncing = true;
+    showSyncStatus('Syncing...', 'mb-accent/70');
+
     const state = getState();
-    document.getElementById('gh-token').value = state.github?.token || '';
-    document.getElementById('gh-repo').value = state.github?.repo || '';
-    document.getElementById('gh-path').value = state.github?.path || 'evaluations/panel-evaluation.json';
-    document.getElementById('github-modal').classList.remove('hidden');
+    // Don't include github config in the saved data
+    const exportData = { ...state };
+    delete exportData.github;
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(exportData, null, 2))));
+
+    try {
+        // Get current SHA if we don't have it
+        if (!ghSha) {
+            try {
+                const existing = await fetch(`https://api.github.com/repos/${cfg.repo}/contents/${cfg.path}`, {
+                    headers: { 'Authorization': `Bearer ${cfg.token}`, 'Accept': 'application/vnd.github.v3+json' }
+                });
+                if (existing.ok) {
+                    const data = await existing.json();
+                    ghSha = data.sha;
+                }
+            } catch (e) {}
+        }
+
+        const body = {
+            message: `Auto-save panel evaluation - ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`,
+            content
+        };
+        if (ghSha) body.sha = ghSha;
+
+        const res = await fetch(`https://api.github.com/repos/${cfg.repo}/contents/${cfg.path}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${cfg.token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            ghSha = data.content.sha;
+            showSyncStatus('Saved', 'green-500/60');
+            setTimeout(() => showSyncStatus('Connected', 'green-500/60'), 2000);
+        } else {
+            const err = await res.json();
+            showSyncStatus('Sync failed', 'red-400/70');
+            console.error('GitHub sync error:', err.message);
+        }
+    } catch (e) {
+        showSyncStatus('Sync failed', 'red-400/70');
+        console.error('GitHub sync error:', e);
+    }
+    isSyncing = false;
 }
 
-function closeGitHubModal() {
-    document.getElementById('github-modal').classList.add('hidden');
+function openSettings() {
+    const cfg = getGitHubConfig() || {};
+    document.getElementById('gh-token').value = cfg.token || '';
+    document.getElementById('gh-repo').value = cfg.repo || '';
+    document.getElementById('gh-path').value = cfg.path || 'evaluations/panel-evaluation.json';
     document.getElementById('gh-status').classList.add('hidden');
+    document.getElementById('settings-modal').classList.remove('hidden');
 }
 
-async function commitToGitHub() {
+function closeSettings() {
+    document.getElementById('settings-modal').classList.add('hidden');
+}
+
+async function saveSettings() {
     const token = document.getElementById('gh-token').value.trim();
     const repo = document.getElementById('gh-repo').value.trim();
     const path = document.getElementById('gh-path').value.trim();
@@ -932,50 +1033,40 @@ async function commitToGitHub() {
         return;
     }
 
-    const state = getState();
-    state.github = { token, repo, path };
-    saveState(state);
-
-    statusEl.textContent = 'Saving...';
+    statusEl.textContent = 'Testing connection...';
     statusEl.className = 'text-xs text-center mt-2 text-mb-accent';
     statusEl.classList.remove('hidden');
 
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(state, null, 2))));
-
+    // Test the token by checking the repo
     try {
-        let sha;
-        try {
-            const existing = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' }
-            });
-            if (existing.ok) {
-                const data = await existing.json();
-                sha = data.sha;
-            }
-        } catch (e) {}
-
-        const body = { message: `Update panel evaluation - ${new Date().toISOString().split('T')[0]}`, content };
-        if (sha) body.sha = sha;
-
-        const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+        const res = await fetch(`https://api.github.com/repos/${repo}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' }
         });
-
-        if (res.ok) {
-            statusEl.textContent = 'Saved successfully to GitHub!';
-            statusEl.className = 'text-xs text-center mt-2 text-green-400';
-            setTimeout(closeGitHubModal, 1500);
-        } else {
+        if (!res.ok) {
             const err = await res.json();
             statusEl.textContent = `Error: ${err.message}`;
             statusEl.className = 'text-xs text-center mt-2 text-red-400';
+            return;
         }
     } catch (e) {
-        statusEl.textContent = `Error: ${e.message}`;
+        statusEl.textContent = `Connection failed: ${e.message}`;
         statusEl.className = 'text-xs text-center mt-2 text-red-400';
+        return;
     }
+
+    setGitHubConfig({ token, repo, path });
+    ghSha = null; // reset SHA for new config
+
+    statusEl.textContent = 'Connected! All changes will auto-save.';
+    statusEl.className = 'text-xs text-center mt-2 text-green-400';
+
+    // Do an immediate sync
+    await syncToGitHub();
+
+    setTimeout(() => {
+        closeSettings();
+        updateSyncIndicator();
+    }, 1000);
 }
 
 function exportJSON() {
@@ -998,6 +1089,7 @@ function init() {
     updateTabLabels();
     renderForm();
     loadDebrief();
+    updateSyncIndicator();
 }
 
 init();
