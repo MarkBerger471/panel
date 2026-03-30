@@ -1,10 +1,12 @@
 {
   "candidateNames": {
-    "1": "",
-    "2": ""
+    "1": "YAE",
+    "2": "RK"
   },
   "ratings": {
-    "1": {},
+    "1": {
+      "safety-compliance": 4
+    },
     "2": {}
   },
   "comments": {
